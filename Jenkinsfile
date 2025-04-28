@@ -63,11 +63,23 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy Container') {
+            steps {
+                script {
+                    bat """
+                        docker stop heart-disease-container || exit 0
+                        docker rm heart-disease-container || exit 0
+                        docker run -d --name heart-disease-container -p 5000:5000 %DOCKER_USER%/${DOCKER_IMAGE}:latest
+                    """
+                }
+            }
+        }
     }
 
     post {
         always {
-            echo 'Cleaning up Docker...'
+            echo 'Cleaning up unused Docker resources...'
             script {
                 bat 'docker system prune -f'
             }
