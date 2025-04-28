@@ -8,9 +8,9 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', 
-                url: 'https://github.com/Sidhish/heart-disease-prediction.git',
-                credentialsId: 'github-token'
+                git branch: 'main',
+                    url: 'https://github.com/Sidhish/heart-disease-prediction.git',
+                    credentialsId: 'github-token'
             }
         }
 
@@ -33,19 +33,14 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'docker-hub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        // Write password to file then use it for security
-                        bat """
-                            echo %DOCKER_PASS% > docker_password.txt
-                            type docker_password.txt | docker login -u %DOCKER_USER% --password-stdin
-                            del docker_password.txt
-                        """
-                    }
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-hub',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    bat """
+                        echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                    """
                 }
             }
         }
@@ -53,16 +48,10 @@ pipeline {
         stage('Push to Docker Hub') {
             steps {
                 script {
-                    withCredentials([usernamePassword(
-                        credentialsId: 'docker-hub',
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
-                        bat """
-                            docker tag ${DOCKER_IMAGE}:${env.BUILD_ID} %DOCKER_USER%/${DOCKER_IMAGE}:latest
-                            docker push %DOCKER_USER%/${DOCKER_IMAGE}:latest
-                        """
-                    }
+                    bat """
+                        docker tag ${DOCKER_IMAGE}:${env.BUILD_ID} %DOCKER_USER%/${DOCKER_IMAGE}:latest
+                        docker push %DOCKER_USER%/${DOCKER_IMAGE}:latest
+                    """
                 }
             }
         }
@@ -78,7 +67,7 @@ pipeline {
 
     post {
         always {
-            echo 'Cleaning up...'
+            echo 'Cleaning up Docker...'
             script {
                 bat 'docker system prune -f'
             }
