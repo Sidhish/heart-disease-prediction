@@ -3,22 +3,24 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = 'heart-disease-app'
-        DOCKER_HUB_CREDENTIALS = credentials('docker-hub')
+        DOCKER_HUB_CREDENTIALS = credentials('docker-hub') // Make sure this credential exists in Jenkins
     }
 
     stages {
         stage('Checkout') {
             steps {
+                // Use the correct GitHub URL and your credentials ID
                 git branch: 'main', 
-                url: 'https://github.com/your-repo/heart-disease-prediction.git'
+                url: 'https://github.com/Sidhish/heart-disease-prediction.git',
+                credentialsId: 'github-token' // Make sure this credential exists in Jenkins
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 script {
-                    // For Windows, ensure Docker is in Windows container mode if needed
-                    def customImage = docker.build("${DOCKER_IMAGE}:${env.BUILD_ID}")
+                    // Build with Windows-compatible commands
+                    bat "docker build -t ${DOCKER_IMAGE}:${env.BUILD_ID} ."
                 }
             }
         }
@@ -26,12 +28,18 @@ pipeline {
         stage('Login to Docker Hub') {
             steps {
                 script {
-                    // Authenticate with Docker Hub
-                    docker.withRegistry('https://index.docker.io/v1/', 'docker-hub') {
-                        // Tag and push the image
-                        def customImage = docker.image("${DOCKER_IMAGE}:${env.BUILD_ID}")
-                        customImage.push()
+                    // Login to Docker Hub
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        bat "docker login -u %DOCKER_USER% -p %DOCKER_PASS%"
                     }
+                    
+                    // Tag and push the image
+                    bat "docker tag ${DOCKER_IMAGE}:${env.BUILD_ID} %DOCKER_USER%/${DOCKER_IMAGE}:${env.BUILD_ID}"
+                    bat "docker push %DOCKER_USER%/${DOCKER_IMAGE}:${env.BUILD_ID}"
                 }
             }
         }
@@ -39,8 +47,8 @@ pipeline {
         stage('Run Tests') {
             steps {
                 script {
-                    // For Windows, use bat instead of sh for command execution
-                    bat 'docker run ${DOCKER_IMAGE}:${env.BUILD_ID} python -m pytest tests/'
+                    // Run tests in the container
+                    bat "docker run --rm ${DOCKER_IMAGE}:${env.BUILD_ID} python -m pytest tests/"
                 }
             }
         }
@@ -48,12 +56,12 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Windows-compatible container management
-                    bat '''
-                    docker stop heart-app || echo "No container to stop"
-                    docker rm heart-app || echo "No container to remove"
-                    docker run -d -p 5000:5000 --name heart-app ${DOCKER_IMAGE}:${env.BUILD_ID}
-                    '''
+                    // Stop and remove existing container if it exists
+                    bat "docker stop heart-app || echo No container to stop"
+                    bat "docker rm heart-app || echo No container to remove"
+                    
+                    // Run new container
+                    bat "docker run -d -p 5000:5000 --name heart-app ${DOCKER_IMAGE}:${env.BUILD_ID}"
                 }
             }
         }
@@ -63,7 +71,7 @@ pipeline {
         always {
             echo 'Cleaning up...'
             script {
-                // Windows-compatible cleanup
+                // Clean up Docker system
                 bat 'docker system prune -f'
             }
         }
