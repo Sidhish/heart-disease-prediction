@@ -14,6 +14,15 @@ pipeline {
             }
         }
 
+        stage('Verify Docker') {
+            steps {
+                script {
+                    bat 'docker --version'
+                    bat 'docker info'
+                }
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 script {
@@ -25,15 +34,16 @@ pipeline {
         stage('Login to Docker Hub') {
             steps {
                 script {
-                    // Use proper Docker Hub authentication with credentials binding
                     withCredentials([usernamePassword(
                         credentialsId: 'docker-hub',
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASS'
                     )]) {
-                        // Use --password-stdin for secure login
+                        // Write password to file then use it for security
                         bat """
-                            echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
+                            echo %DOCKER_PASS% > docker_password.txt
+                            type docker_password.txt | docker login -u %DOCKER_USER% --password-stdin
+                            del docker_password.txt
                         """
                     }
                 }
@@ -48,10 +58,9 @@ pipeline {
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASS'
                     )]) {
-                        // Tag and push the image
                         bat """
-                            docker tag ${DOCKER_IMAGE}:${env.BUILD_ID} %DOCKER_USER%/${DOCKER_IMAGE}:${env.BUILD_ID}
-                            docker push %DOCKER_USER%/${DOCKER_IMAGE}:${env.BUILD_ID}
+                            docker tag ${DOCKER_IMAGE}:${env.BUILD_ID} %DOCKER_USER%/${DOCKER_IMAGE}:latest
+                            docker push %DOCKER_USER%/${DOCKER_IMAGE}:latest
                         """
                     }
                 }
@@ -62,18 +71,6 @@ pipeline {
             steps {
                 script {
                     bat "docker run --rm ${DOCKER_IMAGE}:${env.BUILD_ID} python -m pytest tests/"
-                }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    bat """
-                        docker stop heart-app || echo No container to stop
-                        docker rm heart-app || echo No container to remove
-                        docker run -d -p 5000:5000 --name heart-app ${DOCKER_IMAGE}:${env.BUILD_ID}
-                    """
                 }
             }
         }
